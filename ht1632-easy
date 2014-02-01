@@ -1,0 +1,529 @@
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+
+#define cs PORTB0
+#define wr PORTB1
+#define data PORTB2
+#define cs1 PORTB3
+#define cs2 PORTB4
+#define ht1632_port PORTB
+#define ht1632_data_dir DDRB
+#define sys_en  0x02
+#define led_on 0x06
+#define master_rc 0b000101000
+#define slave_rc 0b100000
+#define commons 0b001010000// onprend ab=10 : voir data sheet
+#define pwm_16 0b101011110
+//les fonts : on trouve les nombres colonne par colonne .
+// après avor dssiné le A sur un tableau 8x8(prendre les intersections
+//marquer les points à allumer , créer le nombre en binaire : lsb en haut et msb est en bas
+// en affectant 1 pour chaque point allumé et 0 sinon ,
+// convertir en ascii si on veut .
+//Pour moi :
+//00x00 est nombre de la première colonne à gauche ;
+//0xfe est le nombre de la 2eme colonne à gauche ;etc...
+//On peut changer les dessins (lol)
+unsigned char A[8]={0x00,0xfe,0xff,0x11,0x11,0x11,0xfe,0x00};//tableau de A
+unsigned char B[8]={0x81,0xff,0xff,0x81,0x81,0x89,0x89,0x76};
+unsigned char C[8]={0x00,0x7e,0xff,0x81,0x81,0x81,0x81,0x00};
+unsigned char D[8]={0x81,0xff,0xff,0x81,0x81,0x81,0x7e,0x00};
+unsigned char E[8]={0x00,0x7e,0xff,0x99,0x99,0x99,0x81,0x00};
+unsigned char F[8]={0x00,0xff,0xff,0x19,0x19,0x19,0x01,0x00};
+unsigned char G[8]={0x00,0x7e,0xff,0x81,0x81,0x91,0x91,0x00};
+unsigned char H[8]={0x00,0xff,0x18,0x18,0x18,0x18,0xff,0x00};
+unsigned char I[8]={0x00,0x00,0x81,0xff,0xff,0x81,0x00,0x00};
+unsigned char J[8]={0x00,0xe1,0xc1,0xff,0xff,0x01,0x01,0x00};
+unsigned char K[8]={0x00,0xff,0xff,0x18,0x24,0x42,0x81,0x00};
+unsigned char L[8]={0x00,0xff,0xff,0x80,0x80,0x80,0xc0,0x00};
+unsigned char M[8]={0x00,0xff,0x06,0x0c,0x0c,0x06,0xff,0x00};
+unsigned char N[8]={0x00,0xff,0xfe,0x18,0x30,0x7f,0xff,0x00};
+unsigned char O[8]={0x00,0x7e,0xc3,0xc3,0xc3,0xc3,0x7e,0x00};
+unsigned char P[8]={0x00,0xff,0xff,0x11,0x11,0x11,0x1f,0x00};
+unsigned char Q[8]={0x00,0x7e,0xc3,0xc3,0xd3,0xe3,0x7e,0x00};
+unsigned char R[8]={0x00,0xff,0xff,0x11,0x31,0x51,0x9f,0x00};
+unsigned char S[8]={0x00,0x8f,0x99,0x99,0x99,0x99,0xf0,0x00};
+unsigned char T[8]={0x00,0x03,0x03,0xff,0xff,0x03,0x03,0x00};
+unsigned char U[8]={0x00,0x7f,0xff,0xc0,0xc0,0xff,0x7f,0x00};
+unsigned char V[8]={0x00,0x1f,0x7f,0x80,0x80,0x7f,0x1f,0x00};
+unsigned char W[8]={0x00,0x3f,0x40,0xf0,0xf0,0x40,0x3f,0x00};
+unsigned char X[8]={0x00,0xc7,0x2c,0x18,0x38,0x64,0xc3,0x00};
+unsigned char Y[8]={0x00,0x06,0xcc,0xd8,0xd8,0xff,0xff,0x00};
+unsigned char Z[8]={0x00,0xc3,0xe3,0xd3,0xcb,0xc7,0xc3,0x00};//tableau de Z
+unsigned char vide[8]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+
+unsigned int longueur(unsigned char *x);
+
+unsigned char *tab[]={A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,vide,vide};
+//*tab permet un balayage facile : A=tab[0] etc....
+
+unsigned char I1[8],I2[8],I3[8],I4[8],I5[8],toto,tonton;
+unsigned int longueur(unsigned char *x);
+unsigned char message[]="HOLTEKHT[[[SALUT[TOUT[LE[MONDE[COMMENT[VA[IL[FAIT[BEAU[A[DAKAR[ET[CHEZ[TOI[Y[A[QUOI[[[";
+//unsigned char J1[64];
+//Par paresse j'ai pris le crochet gauche pour représenter l'espace (vide) car il vient juste après le Z
+//dans la table des asccii donc ascii([)-64=26  et ascii(Z)-65=25 .
+//ça facilite le balayage du tableau tab .
+
+unsigned char J1[96];//car y a 64 colonnes pour 2 panneaux
+void nop(void)
+{
+_delay_us(1);
+}
+
+void write_low(void)
+{
+ht1632_port&=~(1<<wr);nop();
+}
+void write_hight(void)
+{
+ht1632_port|=(1<<wr);nop();
+}
+
+void data_low(void)
+{
+ht1632_port&=~(1<<data);nop();
+}
+void data_hight(void)
+{
+ht1632_port|=(1<<data);nop();
+}
+
+void cs_low(void)
+{
+ht1632_port&=~(1<<cs);nop();
+}
+void cs_hight(void)
+{
+ht1632_port|=(1<<cs);nop();
+}
+void cs1_low(void)
+{
+ht1632_port&=~(1<<cs1);nop();
+}
+void cs1_hight(void)
+{
+ht1632_port|=(1<<cs1);nop();
+}
+
+void cs2_low(void)
+{
+ht1632_port&=~(1<<cs2);nop();
+}
+void cs2_hight(void)
+{
+ht1632_port|=(1<<cs2);nop();
+}
+
+void write_id(void)//code pour ecrire
+{
+
+write_hight();
+write_low();
+data_hight();//envoie 1
+write_hight();
+
+write_low();
+data_low();//envoie 0
+write_hight();
+
+write_low();
+data_hight();//envoie 1
+write_hight();
+
+}
+
+void command_id(void)//code pour une commande
+{
+
+write_hight();
+write_low();
+data_hight();//envoie 1
+write_hight();
+
+write_low();
+data_low();//envoie 0
+write_hight();
+
+write_low();
+data_low();//envoie 0
+write_hight();
+
+}
+
+
+
+void ht1632_write(unsigned char x)
+//ecrit un char; on mettra write_id avant ; commence par le lsb
+//en write continuous mode pas besoin de couper le char D7D6D5D4D3D2D1D0 en 2 groupes ;
+//ht1632 ecrit D3D2D1D0 sur le haut puis D7D6D5D4 dessous  dans chaque colonne: aide à créer les fontes .
+{
+write_low();
+if(x&0x01){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x02){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x04){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x08){data_hight();}
+else {data_low();}
+write_hight();
+//************************
+write_low();
+if(x&0x10){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x20){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x40){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x80){data_hight();}
+else {data_low();}
+write_hight();
+}
+//***********************************
+void ht1632_adr(unsigned char x)
+//ecrire une adresse; le code write_id est mis devant ;
+//on en aura besoin que d'une fois pour l'adresse 0
+{
+write_id();
+write_low();
+if(x&0x40){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x20){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x10){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x08){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x04){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x02){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x01){data_hight();}
+else {data_low();}
+write_hight();
+
+}
+
+//*****************************************
+void ht1632_command(unsigned int x)
+//ecriturecomplète d'une commande pour le panneau1.
+{
+cs_hight();
+cs_low();
+command_id();
+write_low();
+if(x&0x100){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x80){data_hight();}
+else {data_low();}
+write_hight();
+write_low();
+if(x&0x40){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x20){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x10){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x08){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x04){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x02){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x01){data_hight();}
+else {data_low();}
+write_hight();
+cs_hight();
+}
+//*****************************************
+void ht1632_command1(unsigned int x)//pour le panneau2
+//ecriturecomplète d'une commande .
+{
+cs1_hight();cs2_hight();
+cs1_low();cs2_low();
+command_id();
+write_low();
+if(x&0x100){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x80){data_hight();}
+else {data_low();}
+write_hight();
+write_low();
+if(x&0x40){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x20){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x10){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x08){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x04){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x02){data_hight();}
+else {data_low();}
+write_hight();
+
+write_low();
+if(x&0x01){data_hight();}
+else {data_low();}
+write_hight();
+cs1_hight();cs2_hight();
+}
+void ht1632_init(void)
+{
+//on initialise le ht1632
+ht1632_command(sys_en);
+ht1632_command(master_rc);
+ht1632_command(commons);//dans le commons on prend ab=10 (voir le data sheet)
+ht1632_command(led_on);
+ht1632_command(pwm_16);
+ht1632_command1(sys_en);
+ht1632_command1(slave_rc);
+ht1632_command1(commons);//dans le commons on prend ab=10 (voir le data sheet)
+ht1632_command1(led_on);
+ht1632_command1(pwm_16);
+
+}
+
+void init(void)
+{
+tonton=0;
+ht1632_data_dir|=(1<<cs)|(1<<data)|(1<<wr)|(1<<cs1)|(1<<cs2);
+ht1632_port=0xff;
+ht1632_init();
+
+}
+
+void clear(void)//on ecrit des 0 partout pour effacer
+{
+
+for(unsigned int j=0;j<32;j++){
+
+ht1632_write(0b0000);_delay_ms(100);
+
+}
+//cs_hight();
+//_delay_ms(50);
+}
+
+
+
+void permute(void)// L'ESSENTIEL est là ;pour défiler !!!
+{
+unsigned char qq=0;
+while(qq<96) {J1[qq]=J1[qq+1];qq++;}
+//J1[63]=J1[0];
+}
+void tourner(unsigned char *x,unsigned char *y,unsigned char *z,unsigned char *u,unsigned char *s)
+{
+toto=0;
+while(toto<8)//pour ne pas modofier les *x...*s on travaille sur les I .
+{
+I1[toto]=x[toto];I2[toto]=y[toto];I3[toto]=z[toto];I4[toto]=u[toto];I5[toto]=s[toto];toto++;
+}
+J1[95]=I1[0];permute();//permute déécale J1 vers la gauche pour libérer J1[95] à
+//recevoir la donnée suivante.
+
+// on fait tourner  (on permute vers la gauche)
+//les  colonnes des 4 caracteres I1,I2,I3,I4 et on entame I5 le caractère suivant
+//pour faire défiler
+I1[0]=I1[1];I1[1]=I1[2];I1[2]=I1[3];I1[3]=I1[4];
+I1[4]=I1[5];I1[5]=I1[6];I1[6]=I1[7];I1[7]=I2[0];
+//*********
+I2[0]=I2[1];I2[1]=I2[2];I2[2]=I2[3];I2[3]=I2[4];
+I2[4]=I2[5];I2[5]=I2[6];I2[6]=I2[7];I2[7]=I3[0];
+//**********
+I3[0]=I3[1];I3[1]=I3[2];I3[2]=I3[3];I3[3]=I3[4];
+I3[4]=I3[5];I3[5]=I3[6];I3[6]=I3[7];I3[7]=I4[0];
+//***************
+I4[0]=I4[1];I4[1]=I4[2];I4[2]=I4[3];I4[3]=I4[4];
+I4[4]=I4[5];I4[5]=I4[6];I4[6]=I4[7];I4[7]=I5[0];
+//********************
+I5[0]=I5[1];I5[1]=I5[2];I5[2]=I5[3];I5[3]=I5[4];
+I5[4]=I5[5];I5[5]=I5[6];I5[6]=I5[7];
+}
+
+void afficher2(unsigned char x[])//afficher sur l'sclave d'abord puis sur le maitre
+// sinon il y a enchevetrement
+
+{//permute();//Si on active les permutes dans les 2 affiches , les lettres deviennent immenses
+// avec défilement plus rapide ; reduire j3 dans main() pour ralentir .
+unsigned int tata=0;
+ cs2_low();cs_hight();cs1_hight();
+ ht1632_adr(0);
+while(tata<32)// jusqu'à 32 pour couper J1 en trois parties égales ;
+{
+ht1632_write(x[tata]);
+_delay_us(100);
+tata++;
+}
+ cs2_hight();
+}
+
+void afficher1(unsigned char x[])//afficher sur l'sclave d'abord puis sur le maitre
+// sinon il y a enchevetrement
+
+{//permute();
+
+unsigned int tata=32;
+ cs1_low();cs_hight();cs2_hight();
+ ht1632_adr(0);
+while(tata<64)// jusqu'à 64 pour couper J1 en trois parties égales ;
+{
+ht1632_write(x[tata]);
+_delay_us(100);
+tata++;
+}
+ cs1_hight();
+}
+
+
+void afficher(unsigned char x[])// afficher sur le digit maitre
+
+{//permute();
+unsigned int tata=64;// de 32 à 64 l'autre moitié
+ cs_low();cs1_hight();cs2_hight();
+ ht1632_adr(0);
+while(tata<96)
+{
+ht1632_write(x[tata]);
+_delay_us(100);
+tata++;
+}
+ cs_hight();
+}
+
+
+
+unsigned int longueur(unsigned char *x)
+//Pour déterminer la fin de la lecture du tableau message: longueur de message  .
+{
+unsigned int count=0;
+while(*x){count++;x++;}
+return count;
+}
+
+void pause(unsigned int s)
+{while(s--) _delay_ms(1);}
+//*************************************Main
+
+
+int main(void)
+{
+unsigned int i=0,j3=20;
+unsigned int w=longueur(message);
+init();
+
+while(1){// on tourne 8 fois pour récupérer un tableau 8x8
+
+	tourner(tab[message[i%w]-65],tab[message[(i+1)%w]-65],tab[message[(i+2)%w]-65],tab[message[(i+3)%w]-65],tab[message[(i+4)%w]-65]);
+	//cette première permutation donne I1,...I4 que l'on affiche
+	//puis on continue avec les I;
+	// %w permet de rester entre 0 et w-1 sans s'occuper de i++
+	//On fait -65 pour partir de 0 avec le A de numero 65 dans la table des ascii .. .
+afficher(J1);afficher1(J1);afficher2(J1);pause(j3);	//123
+	tourner(I1,I2,I3,I4,I5);//2
+	//j=j2;
+
+afficher(J1);afficher1(J1);afficher2(J1);pause(j3);	//123
+	tourner(I1,I2,I3,I4,I5);//2
+	//j=j2;
+
+afficher(J1);afficher1(J1);afficher2(J1);pause(j3);	//123
+	tourner(I1,I2,I3,I4,I5);//2
+
+afficher(J1);afficher1(J1);afficher2(J1);pause(j3);	//123
+	tourner(I1,I2,I3,I4,I5);//2
+
+afficher(J1);afficher1(J1);afficher2(J1);pause(j3);	//123
+	tourner(I1,I2,I3,I4,I5);//2
+
+afficher(J1);afficher1(J1);afficher2(J1);pause(j3);	//123
+	tourner(I1,I2,I3,I4,I5);//2
+
+afficher(J1);afficher1(J1);afficher2(J1);pause(j3);	//123
+	tourner(I1,I2,I3,I4,I5);//2
+
+afficher(J1);afficher1(J1);afficher2(J1);pause(j3);	//123	//123
+
+i++;
+     }
+
+return 1;
+}
