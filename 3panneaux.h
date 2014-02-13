@@ -1,5 +1,4 @@
 
-
 #include "the_defines.h"
 #include "the_fonts.h"
 
@@ -8,6 +7,8 @@ unsigned int longueur(unsigned char *x);
 
 unsigned char *tab[]={A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,vide,vide};
 //*tab permet un balayage facile : A=tab[0] etc....
+
+unsigned char J1[96];//car y a 96 colonnes pour 3 panneaux
 
 unsigned char I1[8],I2[8],I3[8],I4[8],I5[8],toto,tonton;
 unsigned int longueur(unsigned char *x);
@@ -26,8 +27,8 @@ void write_id(void);
 void command_id(void);
 void ht1632_write(unsigned char x);
 void ht1632_adr(unsigned char x);
-void ht1632_command(unsigned int x);
-void ht1632_command1(unsigned int x);
+void ht1632_master_command(unsigned int x);
+void ht1632_slave_command(unsigned int x);
 void ht1632_init(void);
 void init(void);
 void clear(void);
@@ -42,7 +43,6 @@ unsigned int longueur(unsigned char *x);
 void pause(unsigned int s);
 
 
-unsigned char J1[96];//car y a 96 colonnes pour 3 panneaux
 void nop(void)
 {
 _delay_us(1);
